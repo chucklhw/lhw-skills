@@ -1,0 +1,5 @@
+# The tech-spec-writer scripts use only the Python standard library
+# (re, argparse, subprocess, sys, os, tempfile, textwrap, unittest).
+# No third-party packages are required.
+#
+# System requirements: Python 3 (the scripts were checked with 3.11) and git on PATH.

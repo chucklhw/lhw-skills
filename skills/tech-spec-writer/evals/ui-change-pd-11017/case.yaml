@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: ui-change-pd-11017
+expected_outcome: |
+  A dry-run Technical Specification for PD-11017 (UI change) in tech-spec.md, in the PD-11286 structure,
+  with "Current logic" verified against named classes/SQL on the current branch, technical ACs
+  tracing to the product requirements, a work-item plan naming real classes, Review Focus, and
+  open items that are genuine developer decisions with options and a recommendation. Nothing
+  is written to Jira and no repository file is changed.
