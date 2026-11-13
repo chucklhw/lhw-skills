@@ -126,6 +126,7 @@ class RepoTest(unittest.TestCase):
             "src/Ems.js": "export const IntegrationTypes = { XERO: 1 };",
             "sql/seed.sql": "insert into app_config values ('my.config.key', '1');",
             "node_modules/lib/Foo.js": "bar bar bar",
+            "app/orders.py": "class OrderService:\n    def refund(self):\n        pass\n",
         }
         for path, body in files.items():
             os.makedirs(os.path.join(cls.repo, os.path.dirname(path)), exist_ok=True)
@@ -144,6 +145,10 @@ class RepoTest(unittest.TestCase):
         out = self.identifiers("`Foo.bar()` `Foo.getDisabledOn()` `MAX_RETRIES` `my.config.key` "
                                "`src/Foo.java` `Instant` `IntegrationTypes.XERO` `RuntimeException` "
                                "`api/some/route` `a = b`")
+        self.assertTrue(out.startswith("OK"), out)
+
+    def test_non_java_declarations_pass(self):
+        out = self.identifiers("`OrderService.refund()` `app/orders.py`")
         self.assertTrue(out.startswith("OK"), out)
 
     def test_missing_names_reported(self):

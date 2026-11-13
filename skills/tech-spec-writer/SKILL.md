@@ -1,7 +1,7 @@
 ---
 name: tech-spec-writer
-description: Turn a product-written Jira ticket (PD/SD) — its acceptance criteria, specs and comments — into a developer-approved Technical Specification grounded in the current branch's EMS source code and release SQL, then write it back to Jira by updating the description, adding a comment, or creating a "[Tech Spec]" sub-task. Works with the developer to resolve every implementation decision the code raises before anything is filed. Use whenever a developer asks to write, draft, generate or refine a tech spec, technical specification, technical ACs, implementation plan or solution design for a Jira ticket, or to "convert the product ACs" or "spec out" a ticket before coding — even if they don't say "technical specification". Refuses without a ticket key. Does not change code.
-argument-hint: PD-XXXX | SD-XXXX [--mode comment|update|create] [--dry-run]
+description: Turn a product-written Jira ticket — its acceptance criteria, specs and comments — into a developer-approved Technical Specification grounded in the current branch's source code and data/migration scripts, then write it back to Jira by updating the description, adding a comment, or creating a "[Tech Spec]" sub-task. Works with any repository, and builds up a per-project profile (references/projects/<project>.md) so later runs in the same project are more precise. Works with the developer to resolve every implementation decision the code raises before anything is filed. Use whenever a developer asks to write, draft, generate or refine a tech spec, technical specification, technical ACs, implementation plan or solution design for a Jira ticket, or to "convert the product ACs" or "spec out" a ticket before coding — even if they don't say "technical specification". Refuses without a ticket key. Does not change code.
+argument-hint: <JIRA-KEY> [--mode comment|update|create] [--dry-run]
 ---
 
 # tech-spec-writer
@@ -10,6 +10,11 @@ Converts what the product team wrote on a Jira ticket into a **Technical Specifi
 later Claude session can implement from, and files it back to Jira. The flow is:
 
 **read the ticket → read the code → draft → resolve open items with the developer → approve → write to Jira.**
+
+The method is the same for every repository. What differs per project — where code lives, how
+permissions are enforced, test conventions, release rules, domain gotchas — is kept in an optional
+**project profile**, `references/projects/<project>.md` (step 0). The profile makes the skill more
+accurate in a project it has seen before; the skill works without one.
 
 The spec is the contract between the product intent and the code that will be written. A later
 session will read it with `getJiraIssue` and implement it, usually without this conversation's
@@ -30,7 +35,7 @@ repository's root.
 
 Parse the space-separated tokens from `$ARGUMENTS`:
 
-1. `<ticket>` — **required**. A Jira key such as `PD-11286` or `SD-52579`.
+1. `<ticket>` — **required**. A Jira key such as `PROJ-1234` (project prefix, hyphen, number).
 2. `--mode comment|update|create` — where the approved spec goes. Default `comment`, because it is
    the only mode that leaves the product team's text exactly as they wrote it.
    - `update` — the ticket's description becomes the spec. The product team's original description
@@ -60,9 +65,9 @@ so it cannot do its job without Jira. Check two things:
 
 1. **Installed and available**: the Atlassian/Jira tools (`getJiraIssue`, `getAccessibleAtlassianResources`, …)
    are in this session, either loaded or listed as deferred tools you can load with `ToolSearch`.
-2. **Authenticated and authorised**: call `getAccessibleAtlassianResources` and confirm that
-   `expensemanager.atlassian.net` is in the result. An auth error, a server that is still waiting
-   for authentication, or a list without that site all count as failure.
+2. **Authenticated and authorised**: call `getAccessibleAtlassianResources` and confirm it returns
+   at least one site. An auth error, a server that is still waiting for authentication, or an
+   empty list all count as failure. Keep the list: step 1 picks the ticket's site from it.
 
 If either check fails, **stop and do not run the skill.** In a message starting with
 `[tech-spec-writer]` (see Rules), tell the developer politely that the Jira
@@ -71,25 +76,44 @@ MCP is required. Say which check failed, and give them the short setup steps in
 token. Do not offer to proceed from pasted ticket text instead: a spec built from a paste cannot
 be filed or re-read by the implementing session.
 
-**Figma MCP — optional.** Check whether Figma tools are in the session (a server named `figma`,
-with tools such as `get_metadata`, `get_screenshot` or `get_design_context`, loaded or deferred)
-and authorised (no "requires authentication" notice for it).
+**Figma MCP — optional.** Check whether Figma tools are in the session (a server named `figma`, with
+tools such as `get_metadata`, `get_screenshot` or `get_design_context`) and authorised. Do the check,
+because step 1 depends on it: search the deferred tools with `ToolSearch` (query `figma`) and look for
+an authentication notice. The result is always one of **available**, **installed but not authorised**
+or **not installed**, never "not checked".
 
-- **Available**: in step 1, use it to inspect every Figma link or design on the ticket, its
-  comments and its parent epic. If a Figma skill in the session says it must be loaded before a
-  tool you use, load it first. Treat what you find as product requirements, numbered with the
-  rest, and cite the Figma node in the spec.
-- **Not available or not authorised**: carry on as normal. Treat Figma links as sources you cannot
-  read (step 1), and say once in the report that installing or authorising the Figma MCP would
-  let the skill read them ([references/mcp-setup.md](references/mcp-setup.md#figma-optional)).
+- **Available**: in step 1, inspect every Figma link or design on the ticket, its comments and its
+  parent epic (load a Figma skill first if one says it must be). Treat what you find as product
+  requirements, numbered with the rest, and cite the Figma node in the spec.
+- **Not authorised or not installed**: carry on. Treat Figma links as sources you cannot read (step 1),
+  and say once in the report that installing or authorising the Figma MCP would let the skill read
+  them ([references/mcp-setup.md](references/mcp-setup.md#figma-optional)).
 
-Tell the developer the result in one line before step 1, for example "Jira MCP: connected.
-Figma MCP: not available, so Figma links will be listed as unread."
+**Project profile — after the MCP checks.** The profile holds what is specific to this repository.
+Identify the project from the repository root folder name (`git rev-parse --show-toplevel`) and the
+`origin` remote name if any. Read the front matter of each profile in `references/projects/` (ignore
+`_template.md`) and in `<repo>/.claude/tech-spec-writer/` if that exists (the fallback location, see
+step 2): it matches when one of its `detect-paths` exists under the repository root, or its `name`
+equals the folder or remote name (ignoring case, `-`/`_`). If both locations hold the same profile,
+use the one in `references/projects/`.
+
+- **A profile matches**: read it in full and use it as the project's code map, conventions and
+  examples. It is a starting map, not evidence: confirm what it says on the current branch (step 2);
+  where the branch disagrees, the branch wins and the profile is corrected (end of step 2).
+- **No profile matches**: carry on generically and create one after reading the code (end of step 2),
+  without stopping to ask.
+
+Tell the developer the result in one line before step 1, for example "Jira MCP: connected. Figma MCP:
+not installed, so Figma links will be listed as unread. Project profile: <name>." (or "Project profile:
+none yet, will create `acme-shop.md` after reading the code.")
 
 ### 1. Read the ticket
 
-`getJiraIssue` with `view: "evidence"`. PD/SD tickets live on `expensemanager.atlassian.net`
-(cloudId `f75ea70e-92c7-45e7-ba34-d47a4dc23c52`); the wrong site is the usual reason the call fails.
+`getJiraIssue` with `view: "evidence"`. Choose the site (cloudId) in this order: the profile's
+`jira-cloud-id` if it covers the ticket's project key; the only site from step 0 if there is one;
+otherwise try the `getJiraIssue` call on each accessible site until the ticket is found. The wrong
+site is the usual reason the call fails. Once found, note the site in the project profile if it is
+not there already.
 Then read the comments (`listJiraIssueComments` via `discover` if `getJiraIssue` only reports a
 count) and the parent epic's summary and description — the epic often states the wider goal and
 what sibling tickets cover, which is how you know what is out of scope here.
@@ -104,24 +128,24 @@ Collect, in your own notes:
 - **Scope signals** — "this ticket covers…", "separate ticket for…", sibling tickets in the epic,
   comments that move or drop a requirement. Comments often carry the real scope.
 - **Answers to the ticket's own open questions.** For every marker such as **[TO CONFIRM Qn]**,
-  "proposal:" or "still open", look up that question everywhere before treating it as open: the
-  Open points / questions table (including its "Who answers" or notes cell, where product owners
-  often append the answer, e.g. "PO - As in Xero, Automated User + Tech Support"), dated decisions
-  (D-31Oct), the comments, and the epic. Product teams answer a question in one place and leave the
-  marker in others, so a marker alone does not mean the question is open. When an answer exists:
+  "proposal:" or "still open", look the question up everywhere before treating it as open: the Open
+  points / questions table (including its "Who answers" or notes cell, where product owners often
+  append the answer, e.g. "PO - as in <other integration>, <role A> + <role B>"), dated decisions
+  (D-31Oct), the comments, and the epic. Product teams answer in one place and leave the marker in
+  others. When an answer exists:
   - it is a product requirement: number it like any other (cite where it was answered) and build on it;
-  - read it together with the proposal it answers (for example, the error-handling row's proposed
-    recipient), and spell out what the answer means in this code; if the answer and the proposal
-    differ, or the answer is too terse to apply, that difference is an open item for the developer,
-    not for the product team;
+  - read it with the proposal it answers and spell out what it means in this code; if the two differ,
+    or the answer is too terse to apply, that difference is an open item for the developer, not the
+    product team;
   - note in Background, in one line, every place the marker still reads as open (for example "AC9
     still says TO CONFIRM Q31; answered in Open points"), so the product team can tidy the ticket.
-  Only a question with no answer anywhere stays waiting on the product team (step 5).
-  To find them mechanically, save the description (and comments) to a file in your scratch
-  directory and run `python -I ${CLAUDE_PLUGIN_ROOT}/skills/tech-spec-writer/scripts/ticket_questions.py <file>`. It lists, per question id,
-  every place marked TO CONFIRM, its open-points row and the "who answers" cell, flagging cells
-  that hold more than role names as a possible answer. Read each flagged cell yourself: the flag
-  means "look here", not "answered".
+
+  Only a question with no answer anywhere stays waiting on the product team (step 5). To find them
+  mechanically, save the description (and comments) to a file in your scratch directory and run
+  `python -I ${CLAUDE_PLUGIN_ROOT}/skills/tech-spec-writer/scripts/ticket_questions.py <file>`: it lists,
+  per question id, every TO CONFIRM place, its open-points row and the "who answers" cell, flagging
+  cells that hold more than role names as a possible answer. The flag means "look here", not
+  "answered"; read each flagged cell yourself.
 - **Figma designs** — with the Figma MCP available (step 0), open each linked design and add what
   it shows to the product requirements.
 - **What you cannot read** — screenshots, attachments, and Figma links when the Figma MCP is not
@@ -148,29 +172,29 @@ git log --oneline -5 --grep="<TICKET>"   # any work already done for this ticket
 ```
 
 Then find every surface the product requirements touch. Work outward from the nouns in the ACs —
-screen names, labels, field names, config keys, endpoints, ERP names, report names:
+screen names, labels, field names, config keys, endpoints, integration or vendor names, report
+names. With a project profile, start from its code map; without one, discover the layout from the
+repository's top level, build files and READMEs. Cover each layer the requirement could reach:
 
-- **Frontend** — `prospend-adp-api/src/main/emsui/src/` (`v2/modules/` for newer code,
-  `modules/` for legacy), `src/router.js`, the `*Api.js` the screen calls.
-- **API** — controllers in `prospend-adp-api/src/main/java/com/prospend/web/api/`. Authorisation is
-  usually in the Shiro filter chain in `prospend-adp-api/src/main/resources/global/spring-security-context.xml`,
-  not in annotations — check it for any permission-related requirement.
-- **Services and logic** — interfaces in `prospend-lib-interface`, implementations in
-  `prospend-lib-impl`, `prospend-lib-ems` (`core/domain/logic/`) and `prospend-lib-logic`.
-- **SQL** — mapper XML in `prospend-lib-sqlmap/src/main/resources/com/prospend/sqlmap/`;
-  shared `<sql>` fragments and `<resultMap>`s reach other statements, so follow them.
-- **Schema and data** — release scripts `sql/release/Version_8.*.sql` (older ones in
-  `sql/release-archive/`), ticket scripts in `sql/change/`, emsglobal metadata in
-  `sql/app_config_metadata.sql`. Data the code depends on (config rows, metadata tags, seed rows)
-  is part of "current logic" just as much as Java is.
-- **Tests** — the existing tests for each class you will change, so the plan can say which must be
-  updated.
+- **Frontend** — screens, routes and API clients the requirement names.
+- **API** — handlers or routes. **Authorisation** is often outside the handler (a filter chain,
+  middleware, gateway or security config rather than annotations): find where this project enforces it.
+- **Services and logic** — what sits behind those endpoints, including background jobs and other callers.
+- **Data access** — queries, mappers, ORM models and shared fragments that reach other statements; follow them.
+- **Schema and data** — migrations, release and ticket scripts, seed data, config metadata: "current
+  logic" as much as application code.
+- **Tests** — existing tests for each class you will change, so the plan can say which must be updated.
 
-Search with `python -I ${CLAUDE_PLUGIN_ROOT}/skills/tech-spec-writer/scripts/search.py <pattern> --repo <repo> [--path <dir>] [--glob '*.java']
+Search with `python -I ${CLAUDE_PLUGIN_ROOT}/skills/tech-spec-writer/scripts/search.py <pattern> --repo <repo> [--path <dir>] [--glob '<pattern>']
 [-w] [-F] [-l]` rather than `grep -r`. It searches tracked files only (never `node_modules` or build
 output), cuts long lines and caps the output, telling you how many matches it did not show; narrow
-with `--path`/`--glob` instead of raising `--max`. An unscoped `grep -r` of `prospend-adp-api/src`
-walks `node_modules` and returns megabytes.
+with `--path`/`--glob` instead of raising `--max`. An unscoped recursive grep of a large source tree
+can walk vendored dependencies and return megabytes.
+
+Put independent lookups (several searches, `git` checks, or file reads that do not depend on each
+other) in one command or one parallel batch instead of one call each; every extra call re-reads the
+whole conversation. Read a large file by line range or after locating the symbol, unless you need the
+whole class to explain what it does.
 
 Read the code until you can explain, for each requirement, **what happens today and why**. Keep a
 map of concern → class/statement/script. This is the most valuable thing you produce: product ACs
@@ -178,9 +202,9 @@ describe intent, and almost every real decision in a spec comes from something t
 the product team did not know about — a second caller, a layered lookup, a company-level fallback,
 encrypted values, a cache, a sibling feature sharing the same table.
 
-Mind the domain gotchas in `CLAUDE.md` (for example: `Expense.currencyCode` is the currency of
-`foreignAmount`, not `amount`). A spec that repeats a known wrong assumption sends the next session
-straight into a known bug.
+Mind the domain gotchas the repository documents (`CLAUDE.md`, `AGENTS.md`, a README or contributing
+guide) and those in the project profile. A spec that repeats a known wrong assumption sends the next
+session straight into a known bug.
 
 **If you cannot find the surface a requirement names, do not guess.** Record it as an open item
 with what you searched for.
@@ -201,103 +225,143 @@ whatever that code does, not the ticket's paraphrase of it. For each such refere
 If you cannot find the referenced behaviour, say what you searched for and raise it as an open
 item. Never conclude "there is nothing to copy" without having read the reference's code path.
 
+**Tell the developer when the ticket's ACs are not on this branch.** The spec describes this branch,
+so the developer must know early if the ticket's world is not in it: they may have the wrong branch
+checked out. After reading the code, check everything the ACs, epic or comments depend on or point at:
+a feature or ticket they build on ("PD-nnnn", "as in <X>", a dependency, a sibling), and any class,
+field, config key or screen they name. Mark an item **missing** only after searching the code and scripts.
+
+For each missing item, find where it lives, read-only: `git log --all --oneline --grep="<KEY>"` and
+`git branch -a --contains <sha>`; `git merge-base --is-ancestor <sha> HEAD` to confirm it is not in
+HEAD; `git show <sha>` or `git grep <name> <ref>` to read it there. Read what it adds to the data model
+(fields, columns, config rows) as well as the logic, because a missing field is often the real constraint.
+
+Then tell the developer **before drafting further**, in a `[tech-spec-writer]` notice (not a gate: carry
+on unless they answer). Name each missing item, the ticket or AC that needs it, and where it lives
+(branch and commit, or "not found in any ref"); when it is on another branch, suggest switching to it or
+rebasing. Example: `[tech-spec-writer] The ACs build on PROJ-123 (scheduled token refresh). It is not on
+<branch>; it is on <other-branch> (<sha>). Check you are on the right branch.`
+
+Keep the facts in the spec too: Background says what is missing and where it lives; Current logic
+describes only this branch (anything read on another ref is labelled "reference only"); anything the
+spec must rely on before it exists becomes a rule or plan step ("rebase onto X first") or an open item.
+
+**Create or refresh the project profile.** This is the only file the skill writes besides the spec.
+Write it to the skill's own `references/projects/`. If the developer cannot write there (a read-only or
+managed plugin install: creating the file fails with a permission error), write it to
+`<repo>/.claude/tech-spec-writer/<project-slug>.md` instead. An existing profile is refreshed where it
+was found.
+
+- **No profile matched (step 0)**: create `references/projects/<project-slug>.md` (slug = repository
+  folder name, lowercase with hyphens) from
+  [references/projects/_template.md](references/projects/_template.md). Fill in only what you read and
+  confirmed in this run: Jira site and project key, code map with real paths, where authorisation is
+  enforced, test frameworks and gates, migration/release locations, documented gotchas. Leave a section
+  out rather than guess. Set `detect-paths` to one or two paths that exist only in this repository.
+- **A profile matched: keep it current on every run.** The next run may be another ticket on another
+  branch, so the profile may be updated, changed or overwritten as a whole to match what this run
+  verified on this ticket and branch, rather than appended to. Correct lines now shown wrong (a moved
+  path, a changed convention, a Jira project key, a role or term mapping, a gotcha), add what the next
+  run would otherwise rediscover, and drop what is stale, unconfirmed or no longer earns its space.
+  Keep it small: aim for under about 120 lines, with worked examples cut to one or two short excerpts. Overwrite the front-matter line `last-verified: <branch> @ <sha>, <date>` each time. If
+  nothing needs changing, leave the file untouched.
+  Judge against the code first: a ticket that asks for something the code does differently is a spec
+  question (open item), not a profile error. A fact true only on some branches (a feature that exists on
+  one) stays only if it is worth knowing, labelled with its branch; otherwise leave it out.
+- Never write customer data or credentials into a profile, and keep out ticket text that the spec
+  already holds.
+- Tell the developer in one line what you created or updated and where (`[tech-spec-writer] Created
+  references/projects/acme-shop.md`). This is a notice, not a gate. When the file went into the
+  repository's `.claude/tech-spec-writer/`, say that it is a new untracked file there and that they can
+  commit it or add it to `.git/info/exclude`; change no other repository file (not `.gitignore`).
+- With `--dry-run`, the profile in the skill's directory is still written (it changes no repository file
+  and no Jira content). A dry run never writes into the repository: if the skill's directory is not
+  writable, put the profile text in the conversation instead. Do the same if neither location is writable.
+
 ### 3. Draft the spec
 
-Write the draft in the structure in `references/spec-template.md` — read that file now; it
-explains what each section is for and shows examples from PD-11286, the reference spec. Use exactly
-these sections, in exactly this order, in every version of the spec (draft and final). In
-particular, Rules comes before Current logic. Add no other `##` sections, and in particular no
-"Decisions" or "Decisions taken" section (see step 5). In short:
+Write the draft in the structure in `references/spec-template.md` — read that file now; it explains
+each section. If the project profile has worked examples, read those too: they show the house style.
+Use exactly these sections, in this order, in every version (draft and final): Rules comes before
+Current logic, and no other `##` sections are added, in particular no "Decisions" section (see step 5).
 
-1. **Background** — the problem, in technical terms, and the original product text (quoted in
-   `update` mode).
+1. **Background** — the problem in technical terms, and the original product text (quoted in `update` mode).
 2. **Rules** — numbered invariants the solution must keep. ACs cite them.
-3. **Current logic (verified in code and release SQL, `<branch>` @ `<sha>`, `<date>`)** — what the
+3. **Current logic (verified in code and data scripts, `<branch>` @ `<sha>`, `<date>`)** — what the
    code and data do today, only what you read and confirmed.
-4. **Topic sections** — only when the ticket needs one (PD-11286 has "Encryption").
+4. **Topic sections** — only when the ticket needs one (for example "Encryption").
 5. **Scope** — in scope / out of scope, explicit.
 6. **Acceptance Criteria** — technical, numbered `AC1…`, each verifiable, each citing its rules.
 7. **Spec / Implementation Plan** — ordered work items naming the classes, statements, scripts and
    tests involved, no line numbers.
-8. **Review Focus** — the ways this change could go wrong, each ending "Guarded by …".
+8. **Review Focus** — ways this change could go wrong, each ending "Guarded by …".
 9. **Open items** — decisions still needed.
 
-Write plainly and precisely. Every statement in "Current logic" must be something you read in the
-code or SQL. **Nothing stays "not confirmed".** When you find yourself inferring something, first
-try to confirm it: read the class, follow the call, search the SQL. If it is confirmed, state it
-with its evidence. If it cannot be confirmed from the code (it depends on deployed configuration,
-live data, another repository or MYOB behaviour), make it an open item for the developer to
-confirm, saying what you checked, what is still unknown and how they could check it. Then point
-to that item from the claim ("see open item 3"). This applies to every section, not only
-"Current logic": a rule, AC, plan step or Review Focus item may not rest on an unconfirmed claim
-either. Every technical AC
-must trace to a product requirement (`P1…`), a rule, or something you found in the code. Do not
-invent requirements; if the code suggests something the product team did not ask for, it is an
-open item, not an AC.
+Write plainly and precisely. Every statement in "Current logic" must be something you read in the code or data scripts.
+**Nothing stays "not confirmed".** When you infer something, try to confirm it first (read the class,
+follow the call, search the scripts) and state it with its evidence. If the code cannot confirm it
+(deployed configuration, live data, another repository, a third-party system's behaviour), make it an
+open item saying what you checked, what is unknown and how the developer could check it, and point to
+it from the claim ("see open item 3"). This applies to every section: no rule, AC, plan step or Review
+Focus item may rest on an unconfirmed claim. Every technical AC must trace to a product requirement
+(`P1…`), a rule, or a code finding. Do not invent requirements; if the code suggests something the
+product team did not ask for, it is an open item, not an AC.
 
 **Show evidence where a reader would otherwise have to take your word for it.** The developer
-deciding an open item, and the reviewer approving the spec, need to see *why* you believe a
-finding — especially a surprising one, or one an AC or decision rests on. Point at where it lives,
-and when the exact expression is the point, quote the few characters that prove it:
+deciding an open item, and the reviewer approving the spec, need to see *why* you believe a finding,
+especially a surprising one or one an AC rests on. Point at where it lives, and when the exact
+expression is the point, quote the few characters that prove it:
 
-> Found: `AccessToken.userId` is part of the table's DynamoDB sort key —
-> `AccessTokenDynamoEntity.getSortKey()` is `generateSortKey(dataType, userId, creationDate)`.
+> Found: `Order.customerId` is part of the table's composite key —
+> `OrderEntity.getKey()` is `buildKey(type, customerId, createdAt)`.
 
-Quote the line that proves *this* claim. A similar-looking line nearby (here,
-`generateIntegrationSortKey`, which has no `userId`) proves something else, and a reviewer who opens
-the file will notice.
+Quote the line that proves *this* claim: a similar-looking line nearby (here, a sibling
+`buildLookupKey` with no `customerId`) proves something else, and a reviewer who opens the file will
+notice. Most statements need only the class or script name; a snippet earns its place only when it
+settles a question the reader would otherwise open the file to answer. Keep snippets to one line or
+one short expression: a quoted method body means you are explaining code rather than specifying a change.
 
-> Found: the PD-9348 script seeds `myob.accountrightlive.oauth.scopes = LEGACY` (`sql/change/`).
-
-Balance this against readability. Most statements need only the class or script name; a snippet
-earns its place only when it settles a question a reader would otherwise have to open the file to
-answer. Keep snippets to one line or one short expression — a quoted method body is a sign you are
-explaining code rather than specifying a change.
-
-**Name which one you mean when a term has more than one meaning in this change.** A domain often
-uses one word for several things: "user ID" can be the user who connected, the user who triggered
-an action, or the `userId` key attribute; "status" can be a stored column or a derived value;
-"integration" can be the row or the ERP connection. When the spec uses such a term in more than one
-sense, every rule, AC and plan step that mentions it says which one, by role and by field
-(`TokenRefreshRequest.userId`, the acting user) — and where two senses sit close together, it
-points at the other ("the connecting user's ID is stored on the token row, rule 10"). An implementer
-reads a rule on its own; "a user ID passed in is used for logging only" next to "store the user ID"
+**Name which one you mean when a term has more than one meaning in this change.** "User ID" can be
+the user who connected, the user who triggered an action, or the `userId` key attribute; "status" a
+stored column or a derived value; "integration" the row or the external connection. When the spec uses
+such a term in more than one sense, every rule, AC and plan step that mentions it says which one, by
+role and field (`TokenRefreshRequest.userId`, the acting user), and where two senses sit close together
+it points at the other ("the connecting user's ID is stored on the token row, rule 10"). An implementer
+reads a rule on its own, so "a user ID passed in is used for logging only" next to "store the user ID"
 reads as a contradiction even when both are right.
 
-The reverse happens too: **two terms for one thing.** The product says "company file name", MYOB's
-redirect says `businessName`, the setting is `myob.accountrightlive.entity` labelled "Company File
-Name". When you find this, state the mapping once (in Background or Current logic, a small table is
-fine), say whether the values are really the same or only describe the same thing from different
-sources (an admin-typed setting vs the value MYOB returns), and use one term from then on.
+The reverse is **two terms for one thing** (the product says "workspace name", the vendor's API says
+`orgName`, the setting is `vendor.org.name`). State the mapping once (Background or Current logic; a
+small table is fine), say whether the values are really the same or only describe the same thing from
+different sources (an admin-typed setting vs a value the external system returns), and use one term
+from then on.
 
-**Trace every person or role the ticket names to a code identity.** Tickets name people by role:
-"the connecting Administrator", "the sync user", "the automated user", "the approver". Each one
-becomes a recipient, a permission or a stored value in the solution, so treat the role as an
-assumption until the code backs it. For each, find and state with evidence:
+**Trace every person or role the ticket names to a code identity.** Tickets name people by role ("the
+connecting Administrator", "the sync user", "the automated user", "the approver"), and each becomes a
+recipient, a permission or a stored value, so treat the role as an assumption until the code backs it.
+For each, find and state with evidence:
 
-- **Which identity in the code it is**: a ProSpend login (`Login`, `userId`), a user in the ERP
-  (a MYOB company file Administrator), a system or run-as login, the user on a queued action, or a
-  configured address.
-- **Where that identity is captured**: the endpoint or job where it first appears, for example the
-  current login when `api/accountrightlive/login` starts consent.
-- **Who can actually be it**: the roles that can reach that entry point (the Shiro filter chain in
-  `spring-security-context.xml`, `@RequiresRoles`). The ticket says "Administrator"; the code may also let
-  a payer or a ProSpend support user through.
-- **Whether it is stored, and where**: or only passed through and dropped (for example, in a context
-  object that is never written).
-- **Whether two identities are assumed to be one**: the ProSpend user who clicks Connect and the
-  MYOB Administrator who signs in at MYOB are different accounts, and only one may be visible to
-  ProSpend.
+- **Which identity it is**: a login in this application, a user in an external system, a system or
+  run-as login, the user on a queued action, or a configured address.
+- **Where it is captured**: the endpoint or job where it first appears (for example the session user
+  when the "connect" endpoint starts an authorisation flow).
+- **Who can actually be it**: the roles that can reach that entry point, as this project enforces them
+  (annotations, a filter chain, middleware, security config). The ticket says "Administrator"; the
+  code may also admit support or finance users.
+- **Whether it is stored, and where**, or only passed through and dropped.
+- **Whether two identities are assumed to be one**: the application user who clicks Connect and the
+  administrator who signs in at the external system are different accounts, and only one may be
+  visible to this application.
 
-Anything the code settles, state as a fact in Current logic. Anything it cannot settle (the
-ticket's role is narrower than the roles the code admits, the identity is not stored, or the
-mapping between two identities is assumed) is an open item for the developer.
+Anything the code settles is a fact in Current logic. Anything it cannot settle (the ticket's role is
+narrower than the roles the code admits, the identity is not stored, or the mapping between two
+identities is assumed) is an open item.
 
 **Comments and Javadoc are claims, not evidence.** When one explains why the code does something
-("deliberately not persisted because…"), check the reason against the code paths it describes
-before relying on it — follow the call, look at the branch conditions. Quote the comment only
-together with what you confirmed, and if the code disagrees (for example, the check it protects is
-only reached on a first connect), say so in Current logic.
+("deliberately not persisted because…"), check the reason against the code paths and branch conditions
+before relying on it. Quote it only with what you confirmed, and if the code disagrees (for example the
+check it protects is only reached on a first connect), say so in Current logic. The project profile, if
+any, may add project-specific examples and checks for the points above.
 
 **Coverage check before moving on:** every product requirement `P1…Pn` maps to at least one AC or
 to an explicit out-of-scope line, and every rule is cited by at least one AC, the Tests AC or a
@@ -325,16 +389,16 @@ An open item is a decision the developer must make because the code allows more 
 reasonable solution, or because the product text is ambiguous or contradicts what the code does.
 Typical sources:
 
-- the product AC conflicts with existing behaviour, or would break another feature sharing the code
-  — including logic the code chose on purpose (e.g. the product asks to store the consented company
-  file name; the code deliberately stores only the id, and the name is compared by a guard and used
-  by the legacy company file lookup). Show the conflicting line and let the developer decide.
+- the product AC conflicts with existing behaviour, or would break another feature sharing the code,
+  including logic the code chose on purpose (the product asks to store a value the code deliberately
+  does not store, because a guard compares it or another lookup relies on it). Show the conflicting
+  line and let the developer decide.
 - more than one place implements the same rule (FE and BE, two services, two mappers)
 - existing data would not satisfy the new rule — a migration, backfill or default is needed
 - a requirement is silent on an edge case the code must handle (empty, null, deleted, multi-currency,
   multi-company, permissions, existing records)
 - a choice of approach with real trade-offs (new service vs extending one, schema change vs config)
-- release ordering, feature flags, or tenant-wide (emsglobal) data
+- release ordering, feature flags, or tenant-wide / global data
 - something you could not read or find
 
 For each, write: **the question**, **what you found** (with the class/script, and a snippet where it
@@ -344,6 +408,11 @@ without a reason ("Recommended: (a).") gives the developer nothing to weigh, and
 way these items fall short. For an unreadable source (a Figma link without the Figma MCP, a design
 ticket you could not open), the options are what the spec would do under each plausible reading, and the recommendation
 may be "ask the product team before deciding" — with the reason.
+
+Also give each item a **Consequence** tag: High (blocks the ticket's purpose, or changes what a
+customer sees or receives, stored data, or a security/data-loss risk), Medium, or Low (a detail the
+spec can absorb either way), with one line saying why. Number the items from High to Low, so that
+"the most consequential" and "the least consequential" item mean item 1 and the last item.
 
 Make clear what **leaving things as they are** would mean, as one of the options where it is a
 realistic choice: the developer may decide the change is not wanted at all.
@@ -357,14 +426,10 @@ The developer owns the solution; your job is to put each decision in front of th
 and then make the spec say exactly what they decided. This is a conversation, not a form.
 
 Present the draft's shape briefly (sections and AC titles), then ask about the open items **one at
-a time, most consequential first** — `AskUserQuestion` when the options are discrete, plain
-conversation when they are not. Ask the question, give the finding and the options, and say which
-you recommend and why. Answers that settle an earlier item often change a later one, which is why
-they go one at a time.
-
-Ask strictly one item per message and wait for the answer before asking the next. Never batch
-several open items into one message or one `AskUserQuestion` call. Start each with the
-`[tech-spec-writer]` prefix (see Rules), for example:
+a time, most consequential first**, waiting for each answer: `AskUserQuestion` when the options are
+discrete, plain conversation otherwise. Give the finding and the options, and say which you recommend
+and why. Answers often change a later item, which is why they go one at a time; never batch several
+into one message or call. Start each with the `[tech-spec-writer]` prefix (see Rules), for example:
 
 ```
 [tech-spec-writer] Before finalising the spec, please decide on open item 1 of 4:
@@ -386,43 +451,42 @@ The developer can answer in any of these ways, and each needs different handling
   with an adjustment (say which and why); or it conflicts with something (show the evidence) and
   what they could do instead. They decide after hearing that. When their solution is sound, adopt it
   without hedging — it is often better than yours, because they know things the code does not show.
+- **Refers to an item by description** ("the most consequential", "the least consequential", "the
+  one about X"). Resolve it by the Consequence tags, and say in one line which item you took it to
+  mean. An imperfect match is not a reason to leave the item open: pick the best match, state the
+  assumption, and apply the decision. Never match a rejection ("keep current behaviour") to an item
+  whose removal would defeat the ticket's purpose; take the best match among the others.
 - **Asks you to look further.** Do it, report what you found, and re-ask.
 - **Wants to leave it open** (for example, waiting on the product team). It stays in Open items with
   who or what it is waiting on — the only way an item survives this step.
-- **Answers an item that is waiting on someone else.** If an item (or part of one) is waiting on the
-  product team or anyone other than the developer, a blanket answer such as "take your
-  recommendation for everything else" does not settle it, because the developer cannot answer for
-  them. Settle only the part the developer owns. The waiting part stays in Open items, worded as
-  the open question with "Waiting on: product team" (or whoever), and no Rule, Scope line or AC may
-  decide it in the meantime, for example by declaring it not implemented. It leaves Open items only
-  when the developer passes on that party's answer or explicitly says to go ahead without it, and
-  then the spec says so.
+- **Answers an item that is waiting on someone else** (the product team, or anyone but the
+  developer). A blanket answer such as "take your recommendation for everything else" does not settle
+  it, because the developer cannot answer for them. Settle only the part the developer owns. The
+  waiting part stays in Open items as the open question with "Waiting on: product team" (or whoever),
+  and no Rule, Scope line or AC may decide it meanwhile (for example by declaring it not implemented).
+  It leaves Open items only when the developer passes on that party's answer or says to go ahead
+  without it, and then the spec says so.
 - **Gives a blanket answer** ("take your recommendation for the rest", "whatever you think"). It
-  settles only low-impact items. An item needs the developer's explicit answer, and stays in Open
-  items marked "Waiting on: developer (explicit decision needed; not settled by a blanket answer)",
-  when its recommendation:
+  settles only low-impact items. These stay in Open items marked "Waiting on: developer (explicit
+  decision needed; not settled by a blanket answer)", are each asked in their own message before the
+  final spec is shown, and are never applied silently, when the recommendation:
   - departs from what the product team wrote or answered on the ticket (for example, a different
     email recipient from the one in the product owner's answer);
   - changes what a customer sees or receives (screens, emails, exports, error messages);
-  - adds stored data or a schema change (a new column, attribute, config key or SQL script); or
+  - adds stored data or a schema change (a new column, attribute, config key or migration script); or
   - was raised by the skill's own risk checks (a conflict between an AC and the code, a security or
     data-loss concern, or a role the code cannot map).
 
-  Ask about each such item in its own message, as above, before showing the final spec. Never apply
-  a blanket answer to them silently.
-
 After each decision, **update the spec, not just the list**: the decision becomes a rule, an AC, a
-scope line, a plan step or a Review Focus item, and the item leaves Open items. Then check what it
-touches elsewhere — an AC that assumed another option, a plan step now unnecessary, a risk that no
-longer applies — and fix those too. Before adding a rule, look for an existing rule on the same
-subject. If one exists, merge the decision into it: one rule that keeps every detail of both (each
-condition, value, exception and citation), so that nothing in either version is lost. Do not add a
-near-duplicate, and do not simply overwrite the old rule. If two existing rules already overlap,
-merge them the same way into the earlier one, remove the later one, and update every AC, plan step
-and Review Focus item that cited a rule number that changed. A decision recorded only in the chat is lost to the session that
-implements the spec. Do not also keep a log of decisions: no "Decisions" section, table or
-subsection. The section where each decision now lives is the only record of it, and a separate
-list repeats the spec and drifts from it. If an answer raises a new question, add it and ask it.
+scope line, a plan step or a Review Focus item, and the item leaves Open items. Then fix what it
+touches elsewhere (an AC that assumed another option, a plan step now unnecessary, a risk that no
+longer applies). Before adding a rule, look for an existing one on the same subject and merge the
+decision into it, keeping every detail of both (condition, value, exception, citation); do not add a
+near-duplicate or overwrite the old rule. If two existing rules overlap, merge them into the earlier
+one, remove the later one, and update every AC, plan step and Review Focus item that cited a changed
+rule number. A decision recorded only in the chat is lost to the session that implements the spec, and
+a separate log of decisions (a "Decisions" section, table or subsection) repeats the spec and drifts
+from it, so keep none. If an answer raises a new question, add it and ask it.
 
 The step ends when every item is decided, or deliberately left open by the developer. When all are
 decided, the Open items section reads `None.` Re-run the coverage check and both scripts from step 3
@@ -473,8 +537,9 @@ Read the Technical Specification on <KEY> and implement it on <branch>, plan ste
 ## Rules
 
 - **No ticket key → refuse.**
-- **No code changes.** Read the repo; never edit, build, commit or transition.
-- **Ground "Current logic" in what you read** on the current branch and in the release SQL, and say
+- **No code changes.** Read the repo; never edit, build, commit or transition. The one exception is the
+  fallback project profile in `.claude/tech-spec-writer/` (step 2), and never on a dry run.
+- **Ground "Current logic" in what you read** on the current branch and in its migration/data scripts, and say
   which branch, commit and date.
 - **Every AC traces** to a product requirement, a rule or a code finding; every product requirement
   is covered or explicitly out of scope.
@@ -484,31 +549,4 @@ Read the Technical Specification on <KEY> and implement it on <branch>, plan ste
   does not skip it.
 - **Idempotent** — a re-run revises the existing spec in place; it never files a second one.
 - **English, unassigned, no editorialising.**
-- **Prefix every pause with `[tech-spec-writer]`.** Whenever the skill stops and waits for the
-  developer, start that message with `[tech-spec-writer]` as its first text, on its own line or at
-  the very beginning of the first sentence. With `AskUserQuestion`, put it at the start of the
-  `question` text. This covers asking for a missing ticket key, confirming the ticket key and mode
-  on automatic invocation, a failed Jira pre-flight check (step 0) or Jira call, each open item
-  (step 5) and the approval gate (step 6). It lets the developer see at a glance which questions
-  come from this skill.
-
-## Common mistakes
-
-| Mistake | What to do instead |
-| --- | --- |
-| Rewriting the product ACs in technical words and calling it a spec | The value is in what the code shows. Read it first; most ACs and every open item come from there. |
-| "Current logic" that describes what the code *probably* does | Only what you read. Name the class or script. Confirm anything inferred in the code; if the code cannot confirm it, raise it as an open item for the developer. |
-| Line numbers and full code in the plan | They go stale before the work starts. Name classes, statements and scripts; give DDL or a signature only when it *is* the decision. |
-| Deciding a trade-off yourself because one option looked better | Put it in Open items with your recommendation. The developer owns the solution. |
-| Recording a decision only in the chat | Fold it into Rules / ACs / Scope / Plan, then remove it from Open items. |
-| Missing the data side of the change | Config rows, metadata tags, existing records and release order are part of the solution. Check `sql/`. |
-| Writing to Jira after the developer answered the last open item | Answering items is not approval. Show the final spec and ask. |
-| Writing in the developer's own proposal without checking it | Evaluate it against the code like any option, tell them what you found, then apply what they decide. |
-| A rule that says "the user ID" (or "status", "token"…) when the spec uses that term in two senses | Say which one — by role and field — and point at the other sense where they sit close together. |
-| Two names for one thing ("company file name", `businessName`, `entity`) used interchangeably | Map them once, say where each value comes from, then use one term. |
-| Reading "as in <X>" or "same as PD-nnnn" as a description rather than a pointer | Find and read the code that implements the reference, state what it does, and offer copying it as an option. |
-| Assuming a role in the ticket is a user the code knows ("email the connecting Administrator" → store the connecting `userId`) | Trace it: who the code captures, which roles can reach that point (payer and support may connect too), whether it is stored, and whether the ProSpend user is the MYOB Administrator. Raise what the code cannot settle as an open item. |
-| Repeating a comment's or Javadoc's reason as fact | Check the reason against the code paths; report it only with what you confirmed. |
-| Marking a product requirement "met" or "kept" when the code deliberately does something else | It is a conflict: open item with the conflicting line, options and a recommendation. |
-| A "keep as is" rule that no AC or Review Focus item cites | Give it a check: an AC line, a Tests item or a Review Focus entry, so the implementer verifies it. |
-| Treating "none of these" as no answer | It is a decision to keep things as they are. Record it as scope or a rule and remove what assumed the change. |
+- **Prefix every pause with `[tech-spec-writer]`**: the first text of any message where the skill stops and waits (missing ticket key, auto-invocation confirmation, failed pre-flight or Jira call, each open item, the approval gate). With `AskUserQuestion`, put it at the start of the `question` text. The developer can then see which questions come from this skill.

@@ -5,19 +5,20 @@ so tell them to check the vendor's current documentation if a step does not matc
 
 ## Jira (required)
 
-ProSpend tickets are on `expensemanager.atlassian.net`. Either option works.
+Your tickets live on your organisation's Atlassian site (`<your-site>.atlassian.net`). Either
+option works.
 
 **Option A: Atlassian connector (OAuth).**
-1. Claude desktop app: **Settings → Connectors**, add **Atlassian**, then sign in with the
-   ProSpend Atlassian account. Claude Code CLI: run `/mcp`, choose the Atlassian server and
+1. Claude desktop app: **Settings → Connectors**, add **Atlassian**, then sign in with your
+   Atlassian account. Claude Code CLI: run `/mcp`, choose the Atlassian server and
    authenticate.
-2. Approve access to `expensemanager.atlassian.net`.
+2. Approve access to your site.
 
 **Option B: Jira API token.**
 1. Create a token at <https://id.atlassian.com/manage-profile/security/api-tokens>
    ("Create API token"). Copy it at once, because it is shown only once.
 2. Configure a Jira MCP server that accepts a token, with:
-   - site URL: `https://expensemanager.atlassian.net`
+   - site URL: `https://<your-site>.atlassian.net`
    - username: your Atlassian account email
    - API token: the token from step 1
 

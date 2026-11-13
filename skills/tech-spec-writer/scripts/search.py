@@ -1,6 +1,6 @@
 """Search the repository's tracked source without flooding the conversation.
 
-Usage: python -I search.py <pattern> --repo <path> [--path <dir>] [--glob '*.java' ...]
+Usage: python -I search.py <pattern> --repo <path> [--path <dir>] [--glob '*.ext' ...]
                            [-i] [-w] [-F] [-l] [--max 60]
 
 Runs `git grep` (tracked files only, so node_modules and build output are never searched) and
@@ -23,7 +23,7 @@ def main():
     parser.add_argument("pattern")
     parser.add_argument("--repo", required=True)
     parser.add_argument("--path", action="append", default=[], help="limit to this directory")
-    parser.add_argument("--glob", action="append", default=[], help="limit to files like '*.java'")
+    parser.add_argument("--glob", action="append", default=[], help="limit to files like '*.py'")
     parser.add_argument("-i", action="store_true", help="ignore case")
     parser.add_argument("-w", action="store_true", help="whole words")
     parser.add_argument("-F", action="store_true", help="fixed string, not a regex")

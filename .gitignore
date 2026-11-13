@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+
+# Per-project profile, generated and updated by the skill at run time
+skills/tech-spec-writer/references/projects/ems.md

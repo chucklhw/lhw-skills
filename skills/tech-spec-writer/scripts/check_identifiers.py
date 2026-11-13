@@ -30,6 +30,10 @@ EXTENSIONS = (".java", ".xml", ".sql", ".vue", ".js", ".ts", ".tsx", ".propertie
               ".yaml", ".gradle", ".kts", ".md", ".py", ".vm", ".ftl", ".json", ".sh")
 
 
+SOURCE_EXTENSIONS = (".java", ".kt", ".scala", ".vue", ".js", ".ts", ".tsx", ".py", ".go", ".cs",
+                     ".rb", ".php", ".rs", ".swift")
+
+
 def git(repo, *args):
     return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True,
                           encoding="utf-8", errors="replace").stdout
@@ -78,10 +82,13 @@ def main():
     for f in files:
         basenames.setdefault(os.path.basename(f), []).append(f)
     components = {os.path.splitext(b)[0] for b in basenames}
+    # Declarations in the common server-side languages: the keyword list is deliberately wide.
+    decl = r"(class|interface|enum|record|struct|trait|object|type|module|protocol)\s+[A-Z][A-Za-z0-9_]*"
     declared = set(re.findall(
-        r"(?:class|interface|enum|record)\s+([A-Z]\w*)",
-        git(repo, "grep", "-h", "-o", "-E", r"(class|interface|enum|record)\s+[A-Z][A-Za-z0-9_]*",
-            "--", "*.java", "*.kt")))
+        r"(?:class|interface|enum|record|struct|trait|object|type|module|protocol)\s+([A-Z]\w*)",
+        git(repo, "grep", "-h", "-o", "-E", decl,
+            "--", "*.java", "*.kt", "*.scala", "*.py", "*.go", "*.cs", "*.rb", "*.php", "*.rs",
+            "*.swift")))
     declared |= set(re.findall(
         r"(?:const|let|var|class|function)\s+([A-Z][\w$]*)",
         git(repo, "grep", "-h", "-o", "-E", r"(const|let|var|class|function)\s+[A-Z][A-Za-z0-9_$]*",
@@ -93,7 +100,7 @@ def main():
         return name in declared or name in components or name in imported or name in JAVA_LANG
 
     def class_files(name):
-        return [os.path.join(repo, p) for ext in (".java", ".kt", ".vue", ".js", ".ts")
+        return [os.path.join(repo, p) for ext in SOURCE_EXTENSIONS
                 for p in basenames.get(name + ext, [])]
 
     def has_member(name, member, depth=0):
