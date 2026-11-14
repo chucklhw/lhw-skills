@@ -431,6 +431,22 @@ customer sees or receives, stored data, or a security/data-loss risk), Medium, o
 spec can absorb either way), with one line saying why. Number the items from High to Low, so that
 "the most consequential" and "the least consequential" item mean item 1 and the last item.
 
+**Write open items, and every question you put to the developer, the way you would say it to a
+colleague, in plainer language than the rest of the spec.** This is the one part a person must
+understand quickly and answer, so it is read, not scanned.
+
+- Open with the question in everyday words ("Who should we record as the person who connected?"),
+  not a label or a field name. Keep the exact class, column or setting for the "Found" line, with a few
+  words on what it does, so a developer who has not read that code can still follow.
+- Short sentences, active voice, one idea each. Say what happens to a user or to the data, not only
+  what the code does. Spell out any abbreviation or ticket shorthand the first time.
+- Do not use AC, rule or requirement numbers (P12, rule 4, AC7) in the question or the options; say
+  what they mean. Cross-references are fine elsewhere in the spec.
+- Describe each option as a result ("Keep the table as it is and add two new columns"), and write the
+  recommendation as advice with its reason ("I'd go with (a) because …"). When the answer depends
+  on something you could not read, say so plainly instead of hedging.
+- Keep all four parts and every fact; plain wording replaces jargon, never evidence.
+
 Make clear what **leaving things as they are** would mean, as one of the options where it is a
 realistic choice: the developer may decide the change is not wanted at all.
 
@@ -446,7 +462,8 @@ Present the draft's shape briefly (sections and AC titles), then ask about the o
 a time, most consequential first**, waiting for each answer: `AskUserQuestion` when the options are
 discrete, plain conversation otherwise. Give the finding and the options, and say which you recommend
 and why. Answers often change a later item, which is why they go one at a time; never batch several
-into one message or call. Start each with the `[tech-spec-writer]` prefix (see Rules), for example:
+into one message or call. Write each as a short, friendly message to a colleague (see the wording
+rules in step 4), not a form. Start each with the `[tech-spec-writer]` prefix (see Rules), for example:
 
 ```
 [tech-spec-writer] Before finalising the spec, please decide on open item 1 of 4:

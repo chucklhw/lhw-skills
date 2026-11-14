@@ -139,14 +139,19 @@ Decisions still needed, each as:
    - Waiting on: <developer / product team / …>
 ```
 
-Every item has all four parts, including minor ones. For example:
+Every item has all four parts, including minor ones. Write them in plain, conversational English, the
+way you would explain it to a colleague: the question in everyday words, short sentences, options
+described by what they result in, no AC or rule numbers, and the recommendation as advice with its
+reason. The class and snippet stay in "Found", with a few words on what they do. For example:
 
-> 2. **Who is recorded as the connecting user on a reconnect?**
->    - Found: `userId` is part of the table's sort key — `AccessTokenEntity.getSortKey()` is
->      `generateSortKey(dataType, userId, creationDate)`, so changing the user re-keys the row.
->    - Options: (a) new `connectedBy` / `connectedOn` attributes, key unchanged; (b) re-key the row on
->      each reconnect; (c) keep current behaviour — the connecting user is not recorded.
->    - Recommended: (a), because it records the user without touching the key every reader depends on.
+> 2. **Who should we record as the person who connected, when someone reconnects?**
+>    - Found: the user id is part of the table's sort key (`AccessTokenEntity.getSortKey()` is
+>      `generateSortKey(dataType, userId, creationDate)`), so saving a different user would create a
+>      new row instead of updating the old one.
+>    - Options: (a) keep the key as it is and add two new fields, "connected by" and "connected on";
+>      (b) create a new row on every reconnect; (c) keep current behaviour, so nobody is recorded.
+>    - Recommended: (a), because it records who connected without changing the key that every other
+>      lookup depends on.
 >    - Waiting on: developer.
 
 Resolved items do not stay here: each decision moves into Rules, Scope, an AC, a plan step or Review
