@@ -275,20 +275,26 @@ was found.
   confirmed in this run: Jira site and project key, code map with real paths, where authorisation is
   enforced, test frameworks and gates, migration/release locations, documented gotchas. Leave a section
   out rather than guess. Set `detect-paths` to one or two paths that exist only in this repository.
-- **A profile matched: keep it current on every run.** The next run may be another ticket on another
-  branch, so the profile may be updated, changed or overwritten as a whole to match what this run
-  verified on this ticket and branch, rather than appended to. Correct lines now shown wrong (a moved
-  path, a changed convention, a Jira project key, a role or term mapping, a gotcha), add what the next
-  run would otherwise rediscover, and drop what is stale, unconfirmed or no longer earns its space.
-  Keep it small: aim for under about 120 lines, with worked examples cut to one or two short excerpts. Overwrite the front-matter line `last-verified: <branch> @ <sha>, <date>` each time. If
-  nothing needs changing, leave the file untouched.
+- **A profile matched: make small, verified edits only.** Never rewrite or overwrite the file as a
+  whole. Change a line only when this run verified, in the code, that it is wrong (a moved path, a
+  changed convention, a Jira project key, a gotcha), and add a line only for something the next run
+  would otherwise have to rediscover. Remove a line only when you have confirmed it is false. Keep it
+  small: aim for under about 120 lines, with worked examples cut to one or two short excerpts. If
+  nothing needs changing, leave the file, including its `last-verified` line, untouched; update that
+  line (`<branch> @ <sha>, <date>`) only when you edited something.
   Judge against the code first: a ticket that asks for something the code does differently is a spec
-  question (open item), not a profile error. A fact true only on some branches (a feature that exists on
-  one) stays only if it is worth knowing, labelled with its branch; otherwise leave it out.
+  question (open item), not a profile error.
+- **Keep branch-dependent and ticket-specific facts out.** A profile is read on every branch and every
+  ticket, so write only what holds on any branch of the repository: layout, conventions, where things
+  live. Leave out what exists only on some branches or tickets (a feature, class or script that may be
+  missing elsewhere, a ticket's status, "X is outstanding"). Put that in the spec instead, labelled with
+  its branch.
 - Never write customer data or credentials into a profile, and keep out ticket text that the spec
   already holds.
-- Tell the developer in one line what you created or updated and where (`[tech-spec-writer] Created
-  references/projects/acme-shop.md`). This is a notice, not a gate. When the file went into the
+- Tell the developer what you created or changed and where (`[tech-spec-writer] Created
+  references/projects/acme-shop.md`). For a change, give each edit as a one-line before and after
+  (`was: <old line> / now: <new line>`; `added: …`; `removed: …`) so they can spot a wrong fact. This
+  is a notice, not a gate. When the file went into the
   repository's `.claude/tech-spec-writer/`, say that it is a new untracked file there and that they can
   commit it or add it to `.git/info/exclude`; change no other repository file (not `.gitignore`).
 - With `--dry-run`, the profile in the skill's directory is still written (it changes no repository file
