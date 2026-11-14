@@ -173,5 +173,13 @@ class TicketQuestionsTest(unittest.TestCase):
         self.assertIn("TO CONFIRM without a question id", out)
 
 
+class ProductHashTest(unittest.TestCase):
+    def test_whitespace_is_ignored_and_text_changes_are_not(self):
+        import product_hash
+        self.assertEqual(product_hash.fingerprint("AC1  Show\nbanner"), product_hash.fingerprint(" AC1 Show banner\n"))
+        self.assertNotEqual(product_hash.fingerprint("AC1 Show banner"), product_hash.fingerprint("AC1 Hide banner"))
+        self.assertRegex(product_hash.fingerprint("x"), r"^[0-9a-f]{8}$")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -150,10 +150,27 @@ Collect, in your own notes:
   it shows to the product requirements.
 - **What you cannot read** — screenshots, attachments, and Figma links when the Figma MCP is not
   available. Say so plainly and list them as an open item if they hold a requirement you need.
-- **An existing spec** — a description already in this format, a comment headed
-  `# Technical Specification`, or a `[Tech Spec]` sub-task. If one exists, this run **revises** it
-  rather than starting over: keep its decisions, re-verify its "Current logic", and change only
-  what the code or the developer now says differently. Tell the developer you found it.
+- **An existing spec** — look in all three places whatever `--mode` was given: the ticket's
+  description, its comments, and its sub-tasks (`getJiraIssue`, `listJiraIssueComments`, and the
+  sub-task list). A spec is any text carrying the marker line `tech-spec-writer: <KEY> | product-rev
+  <8 hex> | v<skill version> | <date>` (step 7), or, for specs written before markers existed, a
+  description in this format, a comment headed `# Technical Specification`, or a `[Tech Spec]`
+  sub-task. Tell the developer where you found it.
+  - **One found:** this run **revises** it rather than starting over: keep its decisions, re-verify
+    its "Current logic", and change only what the code, the developer or the changed product text
+    now says differently. Update it where it lives, even if `--mode` names another place; say so.
+  - **More than one, or in a place other than the requested mode:** ask which to update, in a
+    `[tech-spec-writer]` message, and never file a second copy.
+  - **Did the product text change?** Save the description plus every comment except the spec's own
+    comment to a file, run `python -I ${CLAUDE_PLUGIN_ROOT}/skills/tech-spec-writer/scripts/product_hash.py <file>`,
+    and compare with the marker's `product-rev`. Equal: say the product text is unchanged and
+    re-verify the code only. Different: read the ticket's changelog (`getJiraIssue` with the
+    changelog expanded, or `executeRead`) for the old and new text, give the developer a short
+    "what changed" summary, then revise only the rules, ACs, plan steps and open items that depend on
+    the change. A decision the developer made stays unless the change invalidates it; then it goes
+    back to Open items with a note saying why. If the changelog cannot be read, compare the
+    product requirements with the existing spec's numbered list and say the comparison is by text.
+    A spec with no marker has no stored revision: treat the product text as possibly changed.
 
 If a Jira call fails here despite the pre-flight check (for example the token expired, or there is
 no permission on this ticket), stop and tell the developer what failed, as in step 0.
@@ -512,6 +529,14 @@ Wait for an explicit go-ahead. Nothing is written to Jira before it. With `--dry
 Use `contentFormat: "markdown"`. Write the spec in English, factually, without commenting on people
 or teams.
 
+**Marker.** Directly under the `# Technical Specification` heading, in every spec you write or
+revise, put one line: `tech-spec-writer: <KEY> | product-rev <8 hex> | v<version> | <date>`. The
+`product-rev` is `scripts/product_hash.py` run on the ticket's description plus all comments except
+the spec's own, as read just before writing (so a change made during this run is caught next time);
+`<version>` is the `version` in `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`. It is plain
+visible text so no Jira editor strips it, and it is how the next run finds this spec and tells
+whether the product text moved. A revised spec gets a new `product-rev` and date.
+
 - **`update`** — `editJiraIssue` on the ticket's description. Under Background, add
   `### Original product requirements` with the product team's description quoted verbatim. Before
   writing, check whether the original holds content markdown cannot carry (images, panels,
@@ -520,7 +545,7 @@ or teams.
   If the description is already a spec from an earlier run, replace it and keep the existing
   "Original product requirements" block as it is.
 - **`comment`** — `addOrEditJiraIssueComment`. The comment starts with `# Technical Specification`.
-  If an earlier spec comment exists, edit it rather than adding a second.
+  If an earlier spec comment exists (found by its marker, step 1), edit it rather than adding a second.
 - **`create`** — `createJiraIssue` with the ticket's project, `issueTypeName: "Sub-task"`,
   `parent: <ticket>`, summary `[Tech Spec] <ticket summary>`, the spec as description, no assignee.
   If a `[Tech Spec]` sub-task exists, `editJiraIssue` that one instead.
