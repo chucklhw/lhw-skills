@@ -1,7 +1,7 @@
 ---
 name: tech-spec-writer
 description: Turn a product-written Jira ticket — its acceptance criteria, specs and comments — into a developer-approved Technical Specification grounded in the current branch's source code and data/migration scripts, then write it back to Jira by updating the description, adding a comment, or creating a "[Tech Spec]" sub-task. Works with any repository, and builds up a per-project profile (references/projects/<project>.md) so later runs in the same project are more precise. Works with the developer to resolve every implementation decision the code raises before anything is filed. Use whenever a developer asks to write, draft, generate or refine a tech spec, technical specification, technical ACs, implementation plan or solution design for a Jira ticket, or to "convert the product ACs" or "spec out" a ticket before coding — even if they don't say "technical specification". Refuses without a ticket key. Does not change code.
-argument-hint: <JIRA-KEY> [--mode comment|update|create] [--dry-run]
+argument-hint: <JIRA-KEY> [--mode comment|update|create] [--dry-run] [--desc "<free text>"]
 ---
 
 # tech-spec-writer
@@ -45,6 +45,15 @@ Parse the space-separated tokens from `$ARGUMENTS`:
      under the ticket.
 3. `--dry-run` — do everything up to and including the approval gate, but write nothing to Jira.
    Present the final spec in the conversation (or save it to a file if asked) and stop.
+4. `--desc "<free text>"` — optional. The developer's own words (the text is in quotes) on what
+   this run should and should not do, for example `--desc "only revise AC2 and AC3; do not touch
+   the ticket description"`. It can only **narrow** what the run does: fewer parts revised, fewer
+   places written, more caution. It never widens it, so it cannot choose a mode, turn on a write
+   that `--mode` did not allow, or skip the approval gate. If it conflicts with `--mode` (for
+   example "do not overwrite the ticket" with `--mode update`), stop and ask which one the
+   developer means before reading further. If it is unclear which part it refers to ("some ACs"),
+   ask. Apply it throughout, and repeat it back in one line at the approval gate so the developer
+   sees how it was applied. Everything outside the text is handled as normal.
 
 **No ticket key → refuse and stop.** Ask for one. Do not infer it from the branch name, a commit or
 the conversation: the spec has to belong to a ticket, and guessing the wrong one writes a spec onto
