@@ -1,27 +1,47 @@
 # lhw-skills
 
-A Claude Code plugin containing personal skills by chucklhw.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## Skills
+Claude Code skills for developers. Currently one skill: **`tech-spec-writer`**.
 
-| Skill | Purpose |
-|-------|---------|
-| `tech-spec-writer` | Turns a product-written Jira ticket into a developer-approved Technical Specification grounded in the current branch's source code and data scripts, then writes it back to Jira. Works in any repository; keeps a per-project profile for accuracy. |
+## tech-spec-writer: from a Jira ticket to a spec your team can approve
+
+Product writes acceptance criteria. Developers then spend an hour reading code to find out what they
+really mean. `tech-spec-writer` does that reading for you:
+
+- Reads the ticket (acceptance criteria, specs, comments) and the code and data scripts **on your current branch**.
+- Drafts a Technical Specification where every claim about today's behaviour names the class, query or script it came from.
+- Raises each real implementation decision as a plain-English **open item** with options and a recommendation, instead of guessing.
+- Writes the approved spec back to Jira as a description update, a comment or a "[Tech Spec]" sub-task. Nothing is written until you approve.
+- On a re-run, finds the earlier spec and revises only what changed acceptance criteria affect.
+- Never changes your code.
+
+See a full example of the output, on a fictional ticket, in [`examples/acme-shop-demo`](examples/acme-shop-demo/).
+It ships with [evaluation cases](skills/tech-spec-writer/evals/) so changes to the skill can be tested.
+
+### Quick start
+
+```bash
+git clone https://github.com/chucklhw/lhw-skills.git
+cd /path/to/your/repo            # the repository the ticket is about
+claude --plugin-dir /path/to/lhw-skills
+```
+
+Then, in Claude Code, try it without touching Jira:
+
+```
+/tech-spec-writer PROJ-1234 --dry-run
+```
+
+You need Claude Code, Python 3, `git` and a Jira connection (setup in
+[`mcp-setup.md`](skills/tech-spec-writer/references/mcp-setup.md)). It works with any repository.
 
 ## Installation
 
-Clone the repository and load it as a plugin for a session:
-
-```bash
-git clone <repository-url> lhw-skills
-claude --plugin-dir ./lhw-skills
-```
-
-To install it persistently, add the repository as a plugin marketplace or install it from a Git
-URL using `/plugin` (see the Claude Code plugin documentation for the current syntax).
-
 Run `/help` or type `/tech-spec-writer` to confirm the skill is listed (it may appear namespaced as
-`lhw-skills:tech-spec-writer`).
+`lhw-skills:tech-spec-writer`). To install it persistently, add the repository as a plugin
+marketplace or install it from a Git URL using `/plugin` (see the Claude Code plugin documentation
+for the current syntax).
 
 ### Requirements
 
@@ -68,8 +88,8 @@ The skill is generic. What is specific to one repository (where code, auth, test
 scripts live, domain gotchas, Jira site) goes in `skills/tech-spec-writer/references/projects/<project>.md`.
 
 - On each run the skill matches the current repository to a profile by the `detect-paths` or `name`
-  in the profile's front matter. `ems.md` is the profile for the ProSpend EMS repository; it is
-  generated and updated by the skill at run time on each machine, so it is git-ignored.
+  in the profile's front matter. Profiles are generated and updated by the skill at run time on each machine,
+  so the author's own profile is git-ignored.
 - With no match, the skill creates `<repo-folder>.md` from `_template.md` after reading the code and
   tells you. On every later run it updates, changes or overwrites the profile to match the ticket and
   branch it just verified (they may differ each time), so it stays up to date and small (about 120
@@ -91,7 +111,7 @@ skills/
   tech-spec-writer/
     SKILL.md                   Skill instructions
     references/                Spec template and MCP setup notes
-      projects/                Per-project profiles (ems.md, _template.md, one per project)
+      projects/                Per-project profiles (_template.md, one per project)
     scripts/                   Read-only helper scripts (+ tests)
     evals/                     Evaluation cases
 ```
@@ -106,3 +126,8 @@ Run the script tests:
 ```bash
 python -m unittest discover -s skills/tech-spec-writer/scripts/tests
 ```
+
+## Contributing and licence
+
+Issues and ideas are welcome. Released under the [MIT licence](LICENSE). See the
+[changelog](CHANGELOG.md) for release history.

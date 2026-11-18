@@ -3,3 +3,6 @@ __pycache__/
 
 # Per-project profile, generated and updated by the skill at run time
 skills/tech-spec-writer/references/projects/ems.md
+
+# Local promotion drafts (not published)
+drafts/
