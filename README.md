@@ -60,6 +60,7 @@ Open Claude Code **inside the repository the ticket is about** (the skill reads 
 /tech-spec-writer PROJ-1234
 /tech-spec-writer PROJ-1234 --mode comment
 /tech-spec-writer PROJ-1234 --mode create --dry-run
+/tech-spec-writer PROJ-1234 --desc "only revise AC2 and AC3; do not touch the ticket description"
 ```
 
 Arguments:
@@ -68,6 +69,11 @@ Arguments:
 - `--mode comment|update|create` — how to write the result back: add a comment, update the
   description, or create a "[Tech Spec]" sub-task.
 - `--dry-run` — draft and review the spec without writing anything to Jira.
+- `--desc "<free text>"` — optional. Your own words, in quotes, on what this run should and should
+  not do. It can only **narrow** a run (fewer parts revised, fewer places written, more caution). It
+  cannot choose a mode, turn on a write that `--mode` did not allow, or skip the approval gate. If it
+  conflicts with `--mode`, or is unclear about which part it means, the skill asks before going on,
+  and it repeats the text back at the approval gate.
 
 Workflow, in brief:
 
